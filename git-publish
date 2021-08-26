@@ -1,0 +1,80 @@
+#!/usr/bin/env ruby
+
+require 'optparse'
+
+@command_run = false
+
+def fail(message)
+  warn(message)
+  exit 1
+end
+
+def run(command, failure_message)
+  puts if @command_run
+  @command_run = true
+  puts "running: #{command}"
+  unless system(command)
+    fail(failure_message)
+  end
+end
+
+options = {}
+
+parser = OptionParser.new do |opts|
+  opts.banner = <<~EOF
+    Pushes the current branch and optionally opens it on GitHub.
+
+    To install, add this script to your PATH, then run one of the following:
+
+        git config --global alias.publish '!git-publish' # All repos
+        git config alias.publish '!git-publish'          # Current repo only
+
+    Usage: git publish [options]
+
+    Options:
+  EOF
+
+  opts.on('-f', '--force', 'Force push.') do |s|
+    options[:force] = true
+  end
+
+  opts.on('-o', '--open', 'Open GitHub.') do |s|
+    options[:open] = true
+  end
+end
+
+parser.parse!
+
+branch = `git branch --show-current`.strip
+if !$?.success? || branch.empty?
+  fail('fatal: cannot determine current branch')
+end
+
+default_branch = `git symbolic-ref refs/remotes/origin/HEAD`.strip
+unless $?.success? && default_branch.match?(/^refs\/remotes\/origin\/[^\/]+$/)
+  fail('fatal: cannot determine default branch')
+end
+
+default_branch = default_branch.gsub(/^refs\/remotes\/origin\//, '')
+if branch == default_branch
+  fail("fatal: cannot push default branch (#{default_branch})")
+end
+
+push_command = 'git push -u origin HEAD'
+if options[:force]
+  push_command += ' --force'
+end
+
+run(push_command, 'fatal: push failed')
+
+if options[:open]
+  repo_path = `git config --get remote.origin.url`.strip
+  unless $?.success? && repo_path.match?(/^git@github[.]com:[^\/]+\/.*[.]git$/)
+    fail('fatal: repo path')
+  end
+
+  repo_path = repo_path.gsub(/^git@github[.]com:([^\/]+\/.*)[.]git$/, '\1')
+  url = "https://github.com/#{repo_path}/compare/#{branch}#files_bucket"
+
+  run("open #{url}", 'fatal: open failed')
+end
