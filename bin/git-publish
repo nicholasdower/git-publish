@@ -52,7 +52,14 @@ end
 
 default_branch = `git symbolic-ref refs/remotes/origin/HEAD`.strip
 unless $?.success? && default_branch.match?(/^refs\/remotes\/origin\/[^\/]+$/)
-  fail('fatal: cannot determine default branch')
+  system('git remote set-head origin --auto 2>/dev/null')
+  default_branch = `git symbolic-ref refs/remotes/origin/HEAD`.strip
+  unless $?.success? && default_branch.match?(/^refs\/remotes\/origin\/[^\/]+$/)
+    remote_ref = `git ls-remote --symref origin HEAD`.strip
+    match = remote_ref.match(/^ref: refs\/heads\/([^\s]+)\s+HEAD/)
+    fail('fatal: cannot determine default branch') unless match
+    default_branch = "refs/remotes/origin/#{match[1]}"
+  end
 end
 
 default_branch = default_branch.gsub(/^refs\/remotes\/origin\//, '')
